@@ -16,9 +16,20 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import random
 import os
+
+# Zona waktu WIB (UTC+7), tanpa library tambahan.
+# Server cloud memakai UTC, jadi waktu harus diatur manual.
+WIB = timezone(timedelta(hours=7))
+BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli",
+         "Agustus", "September", "Oktober", "November", "Desember"]
+
+
+def waktu_wib() -> str:
+    t = datetime.now(WIB)
+    return f"{t.day} {BULAN[t.month - 1]} {t.year} {t:%H:%M} WIB"
 
 # ============================================================
 # 1. KONFIGURASI HALAMAN
@@ -245,21 +256,24 @@ if r_ratio >= BATAS_NORMAL:
     ket     = "Seluruh beban terlayani. Pompa beroperasi penuh."
 elif r_ratio >= BATAS_DARURAT:
     mode, css, ikon = "SIAGA",   "st-siaga",   "🟡"
-    lapis   = "Lapis 1 sampai 4 (pompa air lapis 5 diputus)"
+    lapis   = "Lapis 1 sampai 4 (lapis 5 pompa tidak memakai baterai)"
     vfd_pct = 60
-    ket     = "Pompa diperlambat. Lapis 5 diputus untuk menghemat baterai."
+    ket     = ("Lapis 5 diputus dari baterai. Pompa hanya jalan dari surplus "
+               "PV siang hari dengan kecepatan 60%.")
 else:
     mode, css, ikon = "DARURAT", "st-darurat", "🔴"
-    lapis   = "Lapis 1 sampai 3 saja (UMKM dan pompa diputus)"
+    lapis   = "Lapis 1 sampai 3 saja (lapis 4 UMKM dan lapis 5 pompa diputus dari baterai)"
     vfd_pct = 30
-    ket     = "Pemutusan beban aktif! Hanya beban esensial yang dilayani."
+    ket     = ("Pemutusan beban aktif! Hanya beban esensial yang dilayani. "
+               "Pompa diturunkan ke 30% dan hanya memakai surplus PV.")
 
 # Override: jika prediksi < 40 kWh selalu masuk DARURAT
 if prediksi_pv < 40:
     mode, css, ikon = "DARURAT", "st-darurat", "🔴"
-    lapis   = "Lapis 1 sampai 3 saja (UMKM dan pompa diputus)"
+    lapis   = "Lapis 1 sampai 3 saja (lapis 4 UMKM dan lapis 5 pompa diputus dari baterai)"
     vfd_pct = 30
-    ket     = "Produksi PV di bawah 40 kWh! Pemutusan beban aktif."
+    ket     = ("Produksi PV di bawah 40 kWh! Pemutusan beban aktif. "
+               "Pompa diturunkan ke 30% dan hanya memakai surplus PV.")
 
 # Zonasi HydroBank
 persen_tandon = level_tandon / 80.0
@@ -284,7 +298,7 @@ st.markdown(
 st.markdown(
     '<p class="sub-title">'
     "Command Center KDMP · Desa Percontohan, Sumba Timur · "
-    f'{datetime.now().strftime("%d %B %Y %H:%M")}'
+    f"{waktu_wib()}"
     "</p>",
     unsafe_allow_html=True,
 )
@@ -298,23 +312,20 @@ with m1:
         delta=f"{prediksi_pv - BEBAN_PENUH:.1f} dari beban penuh",
     )
 with m2:
-    st.metric(
-        "SOC Baterai",
-        f"{soc_baterai}%",
-        delta="Aman" if soc_baterai > 20 else "KRITIS",
-    )
+    st.metric("SOC Baterai", f"{soc_baterai}%")
+    if soc_baterai > 20:
+        st.caption("🟢 Aman (di atas batas 20%)")
+    else:
+        st.caption("🔴 Kritis (genset siap menyala)")
 with m3:
-    st.metric(
-        "Level Tandon",
-        f"{level_tandon:.1f} m³",
-        delta=f"{persen_tandon*100:.0f}% kapasitas",
-    )
+    st.metric("Level Tandon", f"{level_tandon:.1f} m³")
+    st.caption(f"{persen_tandon*100:.0f}% dari kapasitas 80 m³")
 with m4:
-    st.metric(
-        "Pompa VFD",
-        f"{vfd_pct}%",
-        delta="Normal" if vfd_pct == 100 else f"Turun ke {vfd_pct}%",
-    )
+    st.metric("Pompa VFD", f"{vfd_pct}%")
+    if vfd_pct == 100:
+        st.caption("🟢 Kecepatan penuh")
+    else:
+        st.caption(f"🟡 Kecepatan diturunkan ke {vfd_pct}%")
 
 # ---------- Banner status Surya Sentinel ----------
 st.divider()
