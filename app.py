@@ -386,10 +386,12 @@ if r_ratio >= BATAS_NORMAL:
     ket = "Seluruh beban terlayani. Pompa beroperasi penuh."
 elif r_ratio >= BATAS_DARURAT:
     mode, css, ikon = "SIAGA", "st-siaga", "🟡"
-    lapis = "Lapis 1 sampai 4 (lapis 5 pompa tidak memakai baterai)"
+    lapis = ("Lapis 1 sampai 3 aktif penuh, lapis 4 (UMKM dan tenun) dibatasi hanya siang dari PV, "
+             "lapis 5 (pompa) tidak memakai baterai")
     vfd_mode = 60
-    ket = ("Lapis 5 diputus dari baterai. Pompa hanya jalan dari surplus PV "
-           "siang hari dengan kecepatan 60%.")
+    ket = ("Mode hemat. Tandon diisi lebih awal pada siang hari dari surplus PV dengan kecepatan 60%. "
+           "UMKM dan tenun dibatasi: hanya dilayani siang hari dari PV langsung dan tidak memakai baterai malam. "
+           "Lapis 1 sampai 3 tetap aktif penuh.")
 else:
     mode, css, ikon = "DARURAT (KRITIS)", "st-darurat", "🔴"
     lapis = "Lapis 1 sampai 3 saja (lapis 4 UMKM dan lapis 5 pompa diputus dari baterai)"
@@ -427,7 +429,7 @@ elif fase2:
     zona_teks, zona_ikon = "Semua zona aktif (air minum, ternak, irigasi)", "🟢"
     status_zona = {"P1": "Aktif", "P2": "Aktif", "P3": "Aktif"}
 else:
-    zona_teks, zona_ikon = "Zona Fase 1 aktif (air minum dan ternak), irigasi menunggu Fase 2", "🟢"
+    zona_teks, zona_ikon = "Fase 1 aktif (air minum dan ternak), irigasi menunggu Fase 2", "🟢"
     status_zona = {"P1": "Aktif", "P2": "Aktif", "P3": P3_BELUM}
 
 selisih_bocor = debit_tandon - (debit_p1 + debit_p2)
@@ -459,8 +461,9 @@ m1, m2, m3, m4 = st.columns(4)
 selisih_beban = prediksi_pv - KEBUTUHAN_PV_KWH
 with m1:
     st.metric("Prediksi PV Besok", f"{fmt(prediksi_pv)} kWh",
-              delta=f"{fmt(selisih_beban)} kWh dari kebutuhan PV penuh ({fmt(KEBUTUHAN_PV_KWH)})")
-    st.caption(f"Radiasi diprediksi {fmt(radiasi, 2)} kWh per m² per hari")
+              delta=f"{fmt(selisih_beban)} kWh dari kebutuhan PV")
+    st.caption(f"Radiasi diprediksi {fmt(radiasi, 2)} kWh per m² per hari. "
+               f"Kebutuhan PV penuh {fmt(KEBUTUHAN_PV_KWH)} kWh.")
 with m2:
     st.metric("SOC Baterai", f"{soc_baterai}%")
     st.caption("🟢 Aman (di atas batas 20%)" if soc_baterai > SOC_MIN
@@ -492,7 +495,7 @@ notif = []
 if mode.startswith("DARURAT"):
     notif.append(("error", "Load shedding aktif (lapis 4 dan 5). Notifikasi WhatsApp dikirim ke operator desa."))
 elif mode == "SIAGA":
-    notif.append(("warning", "Mode Siaga. Lapis 5 diputus dari baterai. Notifikasi WhatsApp dikirim ke operator desa."))
+    notif.append(("warning", "Mode Siaga. Lapis 4 dibatasi (siang saja) dan lapis 5 diputus dari baterai. Notifikasi WhatsApp dikirim ke operator desa."))
 if soc_baterai <= SOC_MIN:
     notif.append(("error", "SOC mencapai batas 20%. Genset cadangan siap dinyalakan."))
 if sumur_kritis:
