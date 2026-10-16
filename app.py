@@ -340,16 +340,19 @@ with st.sidebar:
 
     st.markdown("#### ⚙️ Kondisi Lapangan")
     soc_baterai = st.slider("SOC Baterai LFP (%)", 0, 100, 72)
-    level_tandon = st.slider("Level Tandon Air (m³)", 0.0, KAP_TANDON, 58.0, step=0.5)
+    level_tandon = st.slider("Level Tandon Air (m³)", 0.0, KAP_TANDON, 58.0, step=0.5,
+                             format="%.1f")
     turun_muka_air = st.slider("Penurunan muka air sumur (m)", 0.0, 20.0, 14.0, step=0.5,
-                               help=f"Batas aman {TURUN_MUKA_AIR_AMAN} m")
+                               format="%.1f", help=f"Batas aman {TURUN_MUKA_AIR_AMAN} m")
+    fase2 = st.checkbox("Fase 2 aktif (irigasi tetes P3 terpasang)", value=False,
+                        help="Pada Fase 1 irigasi belum dibangun")
     st.divider()
 
     st.markdown("#### 💧 Meter Debit (m³ per hari)")
-    debit_pompa = st.number_input("Keluar pompa", 0.0, 150.0, 78.9, step=0.5)
-    debit_tandon = st.number_input("Keluar tandon", 0.0, 150.0, 78.0, step=0.5)
-    debit_p1 = st.number_input("Cabang P1 (air minum)", 0.0, 150.0, 52.0, step=0.5)
-    debit_p2 = st.number_input("Cabang P2 (ternak)", 0.0, 150.0, 25.5, step=0.5)
+    debit_pompa = st.number_input("Keluar pompa", 0.0, 150.0, 78.9, step=0.5, format="%.1f")
+    debit_tandon = st.number_input("Keluar tandon", 0.0, 150.0, 78.0, step=0.5, format="%.1f")
+    debit_p1 = st.number_input("Cabang P1 (air minum)", 0.0, 150.0, 52.0, step=0.5, format="%.1f")
+    debit_p2 = st.number_input("Cabang P2 (ternak)", 0.0, 150.0, 25.5, step=0.5, format="%.1f")
     st.divider()
 
     st.markdown("#### 👤 Simulasi Warga")
@@ -412,15 +415,19 @@ elif tandon_penuh:
 else:
     status_pompa, vfd_pct = f"Menyala {vfd_mode}%", vfd_mode
 
+P3_BELUM = "Belum dibangun (Fase 2)"
 if persen_tandon < BATAS_P2:
     zona_teks, zona_ikon = "Prioritas 1 saja (air minum)", "🔴"
-    status_zona = {"P1": "Aktif", "P2": "Tutup", "P3": "Tutup"}
+    status_zona = {"P1": "Aktif", "P2": "Tutup", "P3": "Tutup" if fase2 else P3_BELUM}
 elif persen_tandon < BATAS_P3:
     zona_teks, zona_ikon = "Prioritas 1 dan 2 (air minum dan ternak)", "🟡"
-    status_zona = {"P1": "Aktif", "P2": "Aktif", "P3": "Tutup"}
-else:
+    status_zona = {"P1": "Aktif", "P2": "Aktif", "P3": "Tutup" if fase2 else P3_BELUM}
+elif fase2:
     zona_teks, zona_ikon = "Semua zona aktif (air minum, ternak, irigasi)", "🟢"
     status_zona = {"P1": "Aktif", "P2": "Aktif", "P3": "Aktif"}
+else:
+    zona_teks, zona_ikon = "Zona Fase 1 aktif (air minum dan ternak), irigasi menunggu Fase 2", "🟢"
+    status_zona = {"P1": "Aktif", "P2": "Aktif", "P3": P3_BELUM}
 
 selisih_bocor = debit_tandon - (debit_p1 + debit_p2)
 persen_bocor = (selisih_bocor / debit_tandon * 100) if debit_tandon > 0 else 0.0
@@ -495,7 +502,7 @@ if tandon_penuh:
 if bocor_tinggi:
     notif.append(("warning", f"Selisih debit tandon dan cabang {fmt(selisih_bocor)} m³ per hari "
                              f"({fmt(persen_bocor)}%). Dugaan kebocoran jaringan."))
-if persen_tandon < BATAS_P3:
+if persen_tandon < BATAS_P2 or (fase2 and persen_tandon < BATAS_P3):
     notif.append(("warning", f"Level tandon {fmt(persen_tandon * 100, 0)}%. Zona dikurangi: {zona_teks}."))
 for w, nama, isi in st.session_state.laporan[-3:]:
     notif.append(("info", f"Laporan warga ({w}) dari {nama}: {isi}"))
@@ -630,9 +637,9 @@ fig_h = go.Figure()
 fig_h.add_trace(go.Bar(x=hari, y=pv_h, name="Produksi PV (kWh)", marker_color="#F39C12"))
 fig_h.add_trace(go.Scatter(x=hari, y=beban_h, name="Beban harian (kWh)", mode="lines+markers",
                            line=dict(color="#2C3E50", width=2.5), marker=dict(size=7)))
-fig_h.add_hline(y=PV_KRITIS_KWH, line_dash="dot", line_color="#E74C3C",
-                annotation_text=f"Batas kritis {PV_KRITIS_KWH:.0f} kWh",
-                annotation_position="bottom right")
+fig_h.add_trace(go.Scatter(x=hari, y=[PV_KRITIS_KWH] * 7, mode="lines",
+                           name=f"Batas kritis {PV_KRITIS_KWH:.0f} kWh",
+                           line=dict(color="#E74C3C", width=2, dash="dot")))
 fig_h.update_layout(height=320, margin=dict(t=30, b=30), yaxis_title="kWh",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5))
 tampil(fig_h)
