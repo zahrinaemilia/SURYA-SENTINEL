@@ -33,10 +33,11 @@ BATAS_BARTER = round(TARIF_ACUAN * BATAS_BARTER_PERSEN)   # Rp 29.885 per KK per
 
 BEBAN_PENUH = 91.3                        # kWh per hari, lapis 1 sampai 5
 RADIASI_REF = 5.0                         # kWh per m2 per hari (acuan R)
-PV_REF_KWH = 91.3                         # ASUMSI: PV harian pada radiasi acuan. Cocokkan dengan Excel.
-BATAS_NORMAL = 0.856
-BATAS_DARURAT = 0.48
-PV_KRITIS_KWH = 40.0
+PV_REF_KWH = 112.5                        # kWh per hari, produksi PV maksimum desain (30 kWp x 5 jam x 0,75), Excel bagian 14
+KEBUTUHAN_PV_KWH = 96.27                  # kWh per hari, kebutuhan energi PV Skenario A penuh, Excel bagian 5
+BATAS_NORMAL = 0.856                      # 96,27 / 112,5 (Excel bagian 14)
+BATAS_DARURAT = 0.48                      # 53,94 / 112,5 (Excel bagian 14)
+PV_KRITIS_KWH = 53.94                     # kWh per hari, PV untuk beban esensial saja, Excel bagian 14
 
 SOC_MIN = 20                              # persen, genset menyala
 KAP_TANDON = 80.0                         # m3
@@ -376,7 +377,7 @@ with st.sidebar:
 # ============================================================
 radiasi = float(np.clip(model_radiasi.predict([[tutupan_awan]])[0], 0.5, 6.0))
 r_ratio = radiasi / RADIASI_REF
-prediksi_pv = r_ratio * PV_REF_KWH
+prediksi_pv = min(r_ratio, 1.0) * PV_REF_KWH   # produksi tidak melebihi PV maksimum desain
 
 if r_ratio >= BATAS_NORMAL:
     mode, css, ikon = "NORMAL", "st-normal", "🟢"
@@ -400,7 +401,7 @@ if prediksi_pv < PV_KRITIS_KWH and not mode.startswith("DARURAT"):
     mode, css, ikon = "DARURAT (KRITIS)", "st-darurat", "🔴"
     lapis = "Lapis 1 sampai 3 saja (lapis 4 UMKM dan lapis 5 pompa diputus dari baterai)"
     vfd_mode = 30
-    ket = (f"Prediksi PV di bawah {PV_KRITIS_KWH:.0f} kWh. Pemutusan beban aktif. "
+    ket = (f"Prediksi PV di bawah {fmt(PV_KRITIS_KWH)} kWh (batas beban esensial). Pemutusan beban aktif. "
            "Pompa diturunkan ke 30% dan hanya memakai surplus PV.")
 
 # ---- HydroBank
@@ -455,10 +456,10 @@ st.info("Purwarupa simulasi. Input sensor memakai slider, model dilatih dari dat
 
 # ---- Metrik utama
 m1, m2, m3, m4 = st.columns(4)
-selisih_beban = prediksi_pv - BEBAN_PENUH
+selisih_beban = prediksi_pv - KEBUTUHAN_PV_KWH
 with m1:
     st.metric("Prediksi PV Besok", f"{fmt(prediksi_pv)} kWh",
-              delta=f"{fmt(selisih_beban)} kWh dari beban penuh")
+              delta=f"{fmt(selisih_beban)} kWh dari kebutuhan PV penuh ({fmt(KEBUTUHAN_PV_KWH)})")
     st.caption(f"Radiasi diprediksi {fmt(radiasi, 2)} kWh per m² per hari")
 with m2:
     st.metric("SOC Baterai", f"{soc_baterai}%")
@@ -631,14 +632,14 @@ st.divider()
 st.markdown("### 📈 Riwayat Produksi PV dan Beban (7 Hari, Data Ilustrasi)")
 rng_h = np.random.default_rng(99)
 hari = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"]
-pv_h = [float(np.clip(PV_REF_KWH * rng_h.uniform(0.45, 0.95), 15, 95)) for _ in range(7)]
-beban_h = [float(rng_h.uniform(70, 91)) for _ in range(7)]
+pv_h = [float(np.clip(PV_REF_KWH * rng_h.uniform(0.45, 0.95), 15, PV_REF_KWH)) for _ in range(7)]
+beban_h = [float(rng_h.uniform(70, BEBAN_PENUH)) for _ in range(7)]
 fig_h = go.Figure()
 fig_h.add_trace(go.Bar(x=hari, y=pv_h, name="Produksi PV (kWh)", marker_color="#F39C12"))
 fig_h.add_trace(go.Scatter(x=hari, y=beban_h, name="Beban harian (kWh)", mode="lines+markers",
                            line=dict(color="#2C3E50", width=2.5), marker=dict(size=7)))
 fig_h.add_trace(go.Scatter(x=hari, y=[PV_KRITIS_KWH] * 7, mode="lines",
-                           name=f"Batas kritis {PV_KRITIS_KWH:.0f} kWh",
+                           name=f"Batas kritis {fmt(PV_KRITIS_KWH)} kWh",
                            line=dict(color="#E74C3C", width=2, dash="dot")))
 fig_h.update_layout(height=320, margin=dict(t=30, b=30), yaxis_title="kWh",
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5))
